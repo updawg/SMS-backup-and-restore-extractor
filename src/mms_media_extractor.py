@@ -172,15 +172,26 @@ def reconstruct_mms_media(sms_xml_dir: str, output_media_dir: str, process_image
 
                     except Exception as e:
                         error_count += 1
-                        print(f"\nWARNING: Failed to extract media: {e}")
+                        print(
+                            f"\nWARNING: Failed to extract media in file '{filename}' "
+                            f"(mms date='{media_date_field}', address='{media_sender_field}', "
+                            f"content_location='{content_location}'): {e}"
+                        )
 
                     # Free memory for the processed <part> element
                     elem.clear()
 
-                elif elem.tag in ('mms', 'parts', 'smses'):
-                    # Clear parent/container elements only at their own 'end' event,
-                    # after all child <part> elements have already been processed.
+                else:
+                    # Clear any non-<part> elements after their 'end' event to
+                    # avoid unbounded memory growth when parsing large XML files.
                     elem.clear()
+
+                # Drop already-processed previous siblings from the parent
+                # to keep the in-memory tree small during iterparse.
+                parent = elem.getparent()
+                if parent is not None:
+                    while elem.getprevious() is not None:
+                        del parent[0]
 
             # Done parsing this file
             del context
@@ -193,7 +204,7 @@ def reconstruct_mms_media(sms_xml_dir: str, output_media_dir: str, process_image
     end_time = time.time()
 
     print(f"{orig_files_count} media files found in messages, "
-          f"{num_dup_files} duplicates(or empty files) removed, "
+          f"{num_dup_files} duplicates (or empty files) removed, "
           f"{error_count} errors. "
           f"Time elapsed: {round(end_time - start_time, 2)} seconds")
 
